@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Pothole Detection</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f9;
+        }
+
+        .phone-outline {
+            width: 360px;
+            height: 640px;
+            background: #121212;
+            border-radius: 40px;
+            box-shadow: 0px 15px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .ar-mode {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        #cameraStream {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .ar-pothole-overlay {
+            position: absolute;
+            top: 50%; /* Center vertically */
+            left: 50%; /* Center horizontally */
+            transform: translate(-50%, -50%); /* Adjust positioning to center */
+            width: 50px; /* Smaller size */
+            height: 50px; /* Smaller size */
+            background-color: #0000ff; /* Blue color */
+            border-radius: 50%;
+            display: none;
+            z-index: 1001;
+            text-align: center;
+            color: white;
+            font-size: 10px;
+            line-height: 50px; /* Centers the text vertically */
+        }
+
+        .distance-text {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 1002;
+        }
+
+        .nearing-text {
+            position: absolute;
+            bottom: 80px; /* Positioned above the button */
+            left: 50%;
+            transform: translateX(-50%);
+            color: white; /* Text in white */
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 1002;
+        }
+
+        .button-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .back-to-map-btn {
+            background: #fff;
+            border: 2px solid #444;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .back-to-map-btn:hover {
+            background-color: #e6e6e6;
+        }
+
+        .ar-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+            border: none;
+            cursor: pointer;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 60px;
+            height: 60px;
+        }
+
+        .ar-button img {
+            width: 30px;
+            height: 30px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="phone-outline">
+        <!-- AR Mode -->
+        <div class="ar-mode" id="arMode" style="display: none;">
+            <video id="cameraStream" autoplay playsinline></video>
+            <div class="ar-pothole-overlay" id="arPotholeOverlay">Pothole</div>
+            <div class="distance-text" id="distanceText">800m</div>
+            <div class="nearing-text" id="nearingText" style="display: none;">You're nearing the pothole!</div>
+            <div class="button-container">
+                <button id="backToMapButton" class="back-to-map-btn">Back to Map View</button>
+            </div>
+        </div>
+
+        <!-- AR Button -->
+        <button class="ar-button" id="arButton">
+            <img src="camera.jpg" alt="Camera Icon">
+        </button>
+    </div>
+
+    <script>
+        let cameraStreamObject = null;
+        let distance = 800;
+        let distanceInterval;
+
+        const arButton = document.getElementById('arButton');
+        const backToMapButton = document.getElementById('backToMapButton');
+        const distanceText = document.getElementById('distanceText');
+        const nearingText = document.getElementById('nearingText');
+        const potholeOverlay = document.getElementById('arPotholeOverlay');
+
+        arButton.addEventListener('click', () => {
+            switchToARMode();
+        });
+
+        backToMapButton.addEventListener('click', () => {
+            switchToMapMode();
+        });
+
+        function switchToARMode() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // Request access to the rear camera (facingMode: environment)
+                navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: { exact: "environment" } } 
+                })
+                .then(stream => {
+                    cameraStreamObject = stream;
+                    const videoElement = document.getElementById('cameraStream');
+                    videoElement.srcObject = cameraStreamObject;
+                    document.getElementById('arMode').style.display = 'block';
+                    startDistanceCountdown();
+                })
+                .catch(error => {
+                    console.error('Error accessing camera:', error);
+                    alert('Unable to access camera for AR mode.');
+                });
+            } else {
+                alert('Camera not supported.');
+            }
+        }
+
+        function switchToMapMode() {
+            if (cameraStreamObject) {
+                cameraStreamObject.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('arMode').style.display = 'none';
+            clearInterval(distanceInterval);  // Stop distance countdown when exiting AR mode
+        }
+
+        function startDistanceCountdown() {
+            distanceInterval = setInterval(() => {
+                distance -= 20;
+                distanceText.textContent = `${distance}m`;
+
+                if (distance <= 500) {
+                    nearingText.style.display = 'block';
+                }
+
+                if (distance <= 0) {
+                    clearInterval(distanceInterval);  // Stop the countdown when reaching 0
+                }
+
+                if (distance <= 500) {
+                    potholeOverlay.style.display = 'block';  // Show the pothole overlay when distance <= 500m
+                }
+
+            }, 1000); // Update every 1 second
+        }
+    </script>
+</body>
+</html>
